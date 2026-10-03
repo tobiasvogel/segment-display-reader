@@ -56,7 +56,7 @@ def main():
     print(f"Evaluating model: {model_id}")
 
     architecture = checkpoint.get("architecture")
-    if architecture != "segment-multitask-v1":
+    if architecture != "segment-multitask-v2":
         raise RuntimeError(
             "This checkpoint predates the multi-task architecture or uses an "
             f"unsupported architecture ({architecture!r}). Retrain with the "
