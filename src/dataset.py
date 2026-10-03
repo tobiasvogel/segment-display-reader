@@ -7,8 +7,13 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-from .labels import CHAR_TO_SEGMENTS
-from .config import SUPPORTED_EXTENSIONS
+from .config import (
+    SUPPORTED_EXTENSIONS,
+    DEFAULT_SEGMENT_TYPE,
+    DISPLAY_TYPE_BY_ID,
+    SEGMENT_TYPES,
+)
+from .labels import TYPE_TO_INDEX, padded_target
 
 
 @dataclass(frozen=True)
@@ -17,21 +22,27 @@ class SampleMeta:
     display_id: str
     label: str
     index: int
+    segment_type: int
 
     @property
     def source_id(self):
-        """Stable ID shared by an original image and all of its augmentations."""
-        return f"{self.display_id}:{self.label}:{self.index}"
+        """Stable ID shared by an original image and all augmentations."""
+        return (
+            f"s{self.segment_type}:{self.display_id}:"
+            f"{self.label}:{self.index}"
+        )
 
 
-# Accepts original files:
-# d0_4_001.png
+# Legacy:
+#   d0_4_001.png
+# New explicit segment-type form:
+#   s14_d0_A_001.png
 #
-# and offline augmentations:
-# d0_4_001_aug012.png
+# Both also accept _augNNN before the extension.
 _FILENAME_RE = re.compile(
-    r"^d(?P<display>[A-Za-z0-9-]+)_"
-    r"(?P<label>[0-9-])_"
+    r"^(?:s(?P<segment_type>7|13|14|16)_)?"
+    r"d(?P<display>[A-Za-z0-9-]+)_"
+    r"(?P<label>[A-Za-z0-9-])_"
     r"(?P<index>\d+)"
     r"(?:_aug\d+)?"
     r"\.[^.]+$"
@@ -44,15 +55,25 @@ def parse_filename(path):
     if not match:
         return None
 
-    label = match.group("label")
-    if label not in CHAR_TO_SEGMENTS:
+    display_id = f"d{match.group('display')}"
+    explicit_type = match.group("segment_type")
+
+    if explicit_type is not None:
+        segment_type = int(explicit_type)
+    else:
+        segment_type = int(
+            DISPLAY_TYPE_BY_ID.get(display_id, DEFAULT_SEGMENT_TYPE)
+        )
+
+    if segment_type not in SEGMENT_TYPES:
         return None
 
     return SampleMeta(
         path=path,
-        display_id=f"d{match.group('display')}",
-        label=label,
+        display_id=display_id,
+        label=match.group("label"),
         index=int(match.group("index")),
+        segment_type=segment_type,
     )
 
 
@@ -94,21 +115,33 @@ class SegmentDataset(Dataset):
 
         image = self.transform(image=image)["image"]
 
-        # HWC -> CHW; grayscale has one channel.
         if image.ndim == 2:
             image = image[..., None]
 
         image = np.transpose(image, (2, 0, 1)).astype(np.float32) / 255.0
         image = torch.from_numpy(image)
 
-        target = torch.tensor(
-            CHAR_TO_SEGMENTS[meta.label],
-            dtype=torch.float32,
+        segment_target, segment_mask = padded_target(
+            meta.segment_type,
+            meta.label,
         )
 
         return {
             "image": image,
-            "target": target,
+            "segment_target": torch.tensor(
+                segment_target,
+                dtype=torch.float32,
+            ),
+            "segment_mask": torch.tensor(
+                segment_mask,
+                dtype=torch.float32,
+            ),
+            "type_target": torch.tensor(
+                TYPE_TO_INDEX[meta.segment_type],
+                dtype=torch.long,
+            ),
+            "segment_type": meta.segment_type,
+            "has_segment_target": bool(sum(segment_mask)),
             "label": meta.label,
             "display_id": meta.display_id,
             "source_id": meta.source_id,
