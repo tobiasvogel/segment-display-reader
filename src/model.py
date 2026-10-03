@@ -1,8 +1,15 @@
-import torch
 from torch import nn
 
+from .config import SEGMENT_TYPES, MAX_SEGMENTS
 
-class SegmentCNN(nn.Module):
+
+class SegmentMultiTaskCNN(nn.Module):
+    """
+    Shared visual backbone with two heads:
+      - display-type classification: 7 / 13 / 14 / 16
+      - up to 16 independent segment-state logits
+    """
+
     def __init__(self):
         super().__init__()
 
@@ -25,16 +32,24 @@ class SegmentCNN(nn.Module):
             nn.Conv2d(64, 96, kernel_size=3, padding=1),
             nn.BatchNorm2d(96),
             nn.ReLU(inplace=True),
-
             nn.AdaptiveAvgPool2d((1, 1)),
         )
 
-        self.head = nn.Sequential(
+        self.shared = nn.Sequential(
             nn.Flatten(),
             nn.Dropout(0.20),
-            nn.Linear(96, 7),
         )
+        self.type_head = nn.Linear(96, len(SEGMENT_TYPES))
+        self.segment_head = nn.Linear(96, MAX_SEGMENTS)
 
     def forward(self, x):
-        x = self.features(x)
-        return self.head(x)
+        features = self.shared(self.features(x))
+        return {
+            "type_logits": self.type_head(features),
+            "segment_logits": self.segment_head(features),
+        }
+
+
+# Backward-friendly import name for callers; old 7-output checkpoints are not
+# shape-compatible and should be retrained after this architecture change.
+SegmentCNN = SegmentMultiTaskCNN
