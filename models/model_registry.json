@@ -1,0 +1,57 @@
+{
+  "active": "segment-2026-10-03-r04.pt",
+  "models": {
+    "segment-2026-10-03-r01": {
+      "architecture": "segment-multitask-v1",
+      "best_epoch": 38,
+      "created_at": "2026-10-03T21:36:45+02:00",
+      "decoder": "probabilistic-v2",
+      "file": "segment-2026-10-03-r01.pt",
+      "supported_segment_types": [
+        7,
+        13,
+        14,
+        16
+      ],
+      "train_source_images": 61,
+      "val_metrics": {
+        "char_acc": 0.4380952380952381,
+        "char_samples": 315,
+        "exact_bits_acc": 0.32063492063492066,
+        "loss": 0.654317715811351,
+        "oracle_type_char_acc": 0.4380952380952381,
+        "segment_acc": 0.7160997732426304,
+        "segment_loss": 0.6542946015085492,
+        "type_acc": 1.0,
+        "type_loss": 4.6239226480432236e-05
+      },
+      "validation_source_images": 15
+    },
+    "segment-2026-10-03-r04": {
+      "architecture": "segment-multitask-v1",
+      "best_epoch": 38,
+      "created_at": "2026-10-03T21:45:43+02:00",
+      "decoder": "probabilistic-v2",
+      "file": "segment-2026-10-03-r04.pt",
+      "supported_segment_types": [
+        7,
+        13,
+        14,
+        16
+      ],
+      "train_source_images": 61,
+      "val_metrics": {
+        "char_acc": 0.4380952380952381,
+        "char_samples": 315,
+        "exact_bits_acc": 0.37777777777777777,
+        "loss": 0.6356329582986378,
+        "oracle_type_char_acc": 0.4380952380952381,
+        "segment_acc": 0.7428571428571429,
+        "segment_loss": 0.6356187941536071,
+        "type_acc": 1.0,
+        "type_loss": 2.8334526492500798e-05
+      },
+      "validation_source_images": 15
+    }
+  }
+}
