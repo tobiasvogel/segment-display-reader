@@ -163,6 +163,18 @@ def evaluate(model, loader, device):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--run",
+        type=int,
+        default=None,
+        help=(
+            "Override today's run number, e.g. --run 4 creates r04. "
+            "If omitted, the next run is determined automatically."
+        ),
+    )
+    args = parser.parse_args()
+
     seed_everything(RANDOM_SEED)
 
     samples = collect_samples(RAW_DIR, AUGMENTED_DIR)
@@ -213,7 +225,7 @@ def main():
     model_dir = Path(MODEL_DIR)
     model_dir.mkdir(parents=True, exist_ok=True)
 
-    model_id = next_model_id()
+    model_id = next_model_id(run=args.run)
     checkpoint_path = model_dir / f"{model_id}.pt"
     created_at = datetime.now().astimezone().isoformat(timespec="seconds")
     print(f"Model ID: {model_id}")
