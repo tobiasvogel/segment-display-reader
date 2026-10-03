@@ -274,9 +274,13 @@ def main():
             f"segment_acc={metrics['segment_acc']*100:6.2f}%"
         )
 
-        # End-to-end character accuracy remains the primary selection metric
-        # whenever a configured charset is available.
-        score = metrics["char_acc"]
+        # End-to-end character accuracy is primary when a configured charset
+        # is available. For type-only datasets, fall back to type accuracy.
+        score = (
+            metrics["char_acc"]
+            if metrics["char_samples"] > 0
+            else metrics["type_acc"]
+        )
 
         if score > best_val:
             best_val = score
