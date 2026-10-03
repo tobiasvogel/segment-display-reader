@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 import re
+
 import cv2
 import numpy as np
 import torch
@@ -17,11 +18,16 @@ class SampleMeta:
     label: str
     index: int
 
+    @property
+    def source_id(self):
+        """Stable ID shared by an original image and all of its augmentations."""
+        return f"{self.display_id}:{self.label}:{self.index}"
 
-# Akzeptiert Originaldateien:
+
+# Accepts original files:
 # d0_4_001.png
 #
-# und augmentierte Dateien:
+# and offline augmentations:
 # d0_4_001_aug012.png
 _FILENAME_RE = re.compile(
     r"^d(?P<display>[A-Za-z0-9-]+)_"
@@ -34,19 +40,19 @@ _FILENAME_RE = re.compile(
 
 def parse_filename(path):
     path = Path(path)
-    m = _FILENAME_RE.match(path.name)
-    if not m:
+    match = _FILENAME_RE.match(path.name)
+    if not match:
         return None
 
-    label = m.group("label")
+    label = match.group("label")
     if label not in CHAR_TO_SEGMENTS:
         return None
 
     return SampleMeta(
         path=path,
-        display_id=f"d{m.group('display')}",
+        display_id=f"d{match.group('display')}",
         label=label,
-        index=int(m.group("index")),
+        index=int(match.group("index")),
     )
 
 
@@ -84,11 +90,11 @@ class SegmentDataset(Dataset):
 
         image = cv2.imread(str(meta.path), cv2.IMREAD_GRAYSCALE)
         if image is None:
-            raise RuntimeError(f"Bild nicht lesbar: {meta.path}")
+            raise RuntimeError(f"Could not read image: {meta.path}")
 
         image = self.transform(image=image)["image"]
 
-        # HWC -> CHW; Graustufen = 1 Kanal
+        # HWC -> CHW; grayscale has one channel.
         if image.ndim == 2:
             image = image[..., None]
 
@@ -97,7 +103,7 @@ class SegmentDataset(Dataset):
 
         target = torch.tensor(
             CHAR_TO_SEGMENTS[meta.label],
-            dtype=torch.float32
+            dtype=torch.float32,
         )
 
         return {
@@ -105,5 +111,6 @@ class SegmentDataset(Dataset):
             "target": target,
             "label": meta.label,
             "display_id": meta.display_id,
+            "source_id": meta.source_id,
             "path": str(meta.path),
         }
