@@ -50,15 +50,75 @@ def prepare_image(image):
     return torch.from_numpy(transformed)
 
 
-def split_positions(image, digits):
+def split_positions_equal(image, digits):
     if digits < 1:
         raise ValueError("--digits must be >= 1.")
 
     height, width = image.shape[:2]
     boundaries = np.linspace(0, width, digits + 1).round().astype(int)
+    return _crops_from_boundaries(image, boundaries)
 
+
+def _active_x_runs(image):
+    # Otsu thresholding works for bright-on-dark and dark-on-bright displays.
+    _, binary = cv2.threshold(
+        image,
+        0,
+        255,
+        cv2.THRESH_BINARY + cv2.THRESH_OTSU,
+    )
+
+    # Treat the minority class as foreground so polarity is handled
+    # automatically for typical display crops.
+    if np.mean(binary > 0) > 0.5:
+        binary = 255 - binary
+
+    height = image.shape[0]
+    min_foreground_pixels = max(1, int(round(height * 0.01)))
+    active = (
+        (binary > 0).sum(axis=0) >= min_foreground_pixels
+    )
+
+    runs = []
+    start = None
+
+    for x, is_active in enumerate(active):
+        if is_active and start is None:
+            start = x
+
+        at_end = x == len(active) - 1
+        if start is not None and (not is_active or at_end):
+            end = x if not is_active else x + 1
+            runs.append((start, end))
+            start = None
+
+    return runs
+
+
+def _merge_closest_runs(runs, target_count):
+    runs = list(runs)
+
+    while len(runs) > target_count:
+        gaps = [
+            runs[i + 1][0] - runs[i][1]
+            for i in range(len(runs) - 1)
+        ]
+        merge_at = int(np.argmin(gaps))
+
+        merged = (
+            runs[merge_at][0],
+            runs[merge_at + 1][1],
+        )
+        runs[merge_at:merge_at + 2] = [merged]
+
+    return runs
+
+
+def _crops_from_boundaries(image, boundaries):
+    height = image.shape[0]
     crops = []
-    for i in range(digits):
+
+    for i in range(len(boundaries) - 1):
         x1 = int(boundaries[i])
         x2 = int(boundaries[i + 1])
         crop = image[0:height, x1:x2]
@@ -71,6 +131,42 @@ def split_positions(image, digits):
         crops.append((crop, (x1, 0, x2, height)))
 
     return crops
+
+
+def split_positions_auto(image, digits):
+    """
+    Split at whitespace between detected character extents.
+
+    This preserves each character's position inside its display cell. That is
+    especially important for narrow characters such as "1", whose lit segments
+    sit on the right side of a 7-segment cell.
+    """
+    if digits < 1:
+        raise ValueError("--digits must be >= 1.")
+
+    if digits == 1:
+        return [(image, (0, 0, image.shape[1], image.shape[0]))]
+
+    runs = _active_x_runs(image)
+
+    if len(runs) > digits:
+        runs = _merge_closest_runs(runs, digits)
+
+    if len(runs) != digits:
+        print(
+            "Warning: automatic split found "
+            f"{len(runs)} character region(s), expected {digits}; "
+            "falling back to equal-width splitting."
+        )
+        return split_positions_equal(image, digits)
+
+    boundaries = [0]
+    for left, right in zip(runs[:-1], runs[1:]):
+        gap_midpoint = int(round((left[1] + right[0]) / 2.0))
+        boundaries.append(gap_midpoint)
+    boundaries.append(image.shape[1])
+
+    return _crops_from_boundaries(image, boundaries)
 
 
 def resolve_common_type(type_logits, forced_type=None):
@@ -94,7 +190,7 @@ def main():
     parser = argparse.ArgumentParser(
         description=(
             "Run one image through a trained segment-display model. "
-            "Use --digits for equally spaced multi-position displays."
+            "Use --digits for multi-position displays."
         )
     )
     parser.add_argument(
@@ -110,9 +206,16 @@ def main():
         "--digits",
         type=int,
         default=1,
+        help="Number of display positions in the image. Default: 1.",
+    )
+    parser.add_argument(
+        "--split",
+        choices=("auto", "equal"),
+        default="auto",
         help=(
-            "Number of equally spaced display positions in the image. "
-            "Default: 1."
+            "How to split multi-position displays. 'auto' uses whitespace "
+            "between detected character regions and preserves character "
+            "geometry; 'equal' uses fixed-width cells. Default: auto."
         ),
     )
     parser.add_argument(
@@ -159,7 +262,10 @@ def main():
 
         image = image[y1:y2, x1:x2]
 
-    positions = split_positions(image, args.digits)
+    if args.split == "auto":
+        positions = split_positions_auto(image, args.digits)
+    else:
+        positions = split_positions_equal(image, args.digits)
 
     if args.save_crops:
         crop_dir = Path(args.save_crops)
@@ -184,9 +290,9 @@ def main():
     checkpoint = torch.load(checkpoint_path, map_location=device)
 
     architecture = checkpoint.get("architecture")
-    if architecture != "segment-multitask-v1":
+    if architecture != "segment-multitask-v2":
         raise RuntimeError(
-            "This prediction script requires a segment-multitask-v1 "
+            "This prediction script requires a segment-multitask-v2 "
             "checkpoint. Retrain with the current train.py."
         )
 
