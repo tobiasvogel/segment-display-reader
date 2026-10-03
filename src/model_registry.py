@@ -1,6 +1,7 @@
 from datetime import datetime
 import json
 from pathlib import Path
+import re
 
 from .config import MODEL_DIR, MODEL_PREFIX
 
@@ -32,20 +33,66 @@ def save_registry(registry):
     )
 
 
-def next_model_id():
+def _model_id(date, run):
+    return f"{MODEL_PREFIX}-{date}-r{run:02d}"
+
+
+def next_model_id(run=None):
+    """
+    Return a model ID for today's date.
+
+    Without an explicit run number, determine the next run from both:
+      - versioned .pt files in models/
+      - model IDs already recorded in model_registry.json
+
+    Passing run=N overrides automatic allocation, e.g. --run 4 -> r04.
+    Existing checkpoint files are never overwritten accidentally.
+    """
     model_dir = Path(MODEL_DIR)
     model_dir.mkdir(parents=True, exist_ok=True)
 
     date = datetime.now().astimezone().strftime("%Y-%m-%d")
     prefix = f"{MODEL_PREFIX}-{date}-r"
 
-    runs = []
-    for path in model_dir.glob(f"{prefix}*.pt"):
-        suffix = path.stem.removeprefix(prefix)
-        if suffix.isdigit():
-            runs.append(int(suffix))
+    if run is not None:
+        run = int(run)
+        if run < 1:
+            raise ValueError("Run number must be >= 1.")
 
-    return f"{prefix}{max(runs, default=0) + 1:02d}"
+        model_id = _model_id(date, run)
+        checkpoint_path = model_dir / f"{model_id}.pt"
+
+        if checkpoint_path.exists():
+            raise FileExistsError(
+                f"Checkpoint already exists: {checkpoint_path}. "
+                "Choose another --run value."
+            )
+
+        return model_id
+
+    runs = set()
+
+    # Check files that are present locally.
+    pattern = re.compile(
+        rf"^{re.escape(prefix)}(?P<run>\d+)\.pt$"
+    )
+    for path in model_dir.glob(f"{prefix}*.pt"):
+        match = pattern.match(path.name)
+        if match:
+            runs.add(int(match.group("run")))
+
+    # Also check registry history, because older checkpoints may no longer be
+    # present on the current machine.
+    registry = load_registry()
+    registry_pattern = re.compile(
+        rf"^{re.escape(prefix)}(?P<run>\d+)$"
+    )
+    for model_id in registry.get("models", {}):
+        match = registry_pattern.match(model_id)
+        if match:
+            runs.add(int(match.group("run")))
+
+    return _model_id(date, max(runs, default=0) + 1)
 
 
 def register_model(model_id, checkpoint_path, metadata):
