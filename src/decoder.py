@@ -1,21 +1,28 @@
 import math
 
-from .labels import CHAR_TO_SEGMENTS
+from .labels import get_charset
 
 
-def rank_characters(probabilities, eps=1e-7):
+def rank_characters(segment_type, probabilities, eps=1e-7):
     """
-    Rank valid characters by the Bernoulli likelihood of their expected
-    seven-segment pattern.
+    Rank valid characters for one segment family by Bernoulli likelihood.
 
-    The returned confidence is normalized only across the known character set;
-    it should therefore be treated as a relative decoder confidence rather than
-    a calibrated probability of correctness.
+    Confidence is normalized over the configured charset for that family and is
+    therefore a relative decoder confidence, not a calibrated correctness
+    probability.
     """
-    probs = [min(1.0 - eps, max(eps, float(p))) for p in probabilities]
+    charset = get_charset(segment_type)
+    if not charset:
+        return []
+
+    active = int(segment_type)
+    probs = [
+        min(1.0 - eps, max(eps, float(p)))
+        for p in probabilities[:active]
+    ]
 
     scored = []
-    for char, pattern in CHAR_TO_SEGMENTS.items():
+    for char, pattern in charset.items():
         log_likelihood = 0.0
         for p, expected_on in zip(probs, pattern):
             log_likelihood += (
@@ -43,12 +50,21 @@ def rank_characters(probabilities, eps=1e-7):
     return scored
 
 
-def decode_probabilities(probabilities):
-    ranked = rank_characters(probabilities)
+def decode_probabilities(segment_type, probabilities):
+    ranked = rank_characters(segment_type, probabilities)
+
+    if not ranked:
+        return {
+            "char": "?",
+            "confidence": 0.0,
+            "second_char": None,
+            "second_confidence": 0.0,
+            "margin": 0.0,
+            "ranking": [],
+        }
 
     best = ranked[0]
     second = ranked[1] if len(ranked) > 1 else None
-
     second_confidence = (
         second["confidence"] if second is not None else 0.0
     )
