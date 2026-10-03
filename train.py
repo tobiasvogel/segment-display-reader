@@ -1,5 +1,6 @@
 from pathlib import Path
 import random
+
 import numpy as np
 import torch
 from torch import nn
@@ -23,7 +24,7 @@ from src.dataset import collect_samples, SegmentDataset
 from src.transforms import train_transform, eval_transform
 from src.split import split_samples
 from src.model import SegmentCNN
-from src.labels import decode_segments
+from src.decoder import decode_probabilities
 
 
 def seed_everything(seed):
@@ -68,9 +69,12 @@ def evaluate(model, loader, device):
         segment_correct += int((bits == target_bits).sum().item())
         segment_total += int(target_bits.numel())
 
-        for pred_bits, true_label in zip(bits.cpu().tolist(), batch["label"]):
-            pred_char = decode_segments(pred_bits)
-            char_correct += int(pred_char == true_label)
+        for pred_probs, true_label in zip(
+            probs.cpu().tolist(),
+            batch["label"],
+        ):
+            prediction = decode_probabilities(pred_probs)["char"]
+            char_correct += int(prediction == true_label)
 
     return {
         "loss": loss_sum / max(1, total_samples),
@@ -83,19 +87,24 @@ def evaluate(model, loader, device):
 def main():
     seed_everything(RANDOM_SEED)
 
-    # WICHTIG:
-    # Der Split wird über Original- und Augmentierungsdateien gemeinsam gemacht.
-    # Für echte Experimente sollten augmentierte Varianten eines Originals nicht
-    # über Train/Val verteilt werden. Der Display-ID-Split vermeidet das sauber.
     samples = collect_samples(RAW_DIR, AUGMENTED_DIR)
 
     if len(samples) < 2:
-        raise RuntimeError("Zu wenige Samples zum Trainieren.")
+        raise RuntimeError("Too few samples for training.")
 
     train_samples, val_samples = split_samples(samples)
 
-    print(f"Train: {len(train_samples)}")
-    print(f"Validation: {len(val_samples)}")
+    train_sources = len({s.source_id for s in train_samples})
+    val_sources = len({s.source_id for s in val_samples})
+
+    print(
+        f"Train: {len(train_samples)} files "
+        f"from {train_sources} source images"
+    )
+    print(
+        f"Validation: {len(val_samples)} files "
+        f"from {val_sources} source images"
+    )
 
     train_ds = SegmentDataset(train_samples, train_transform())
     val_ds = SegmentDataset(val_samples, eval_transform())
@@ -142,7 +151,7 @@ def main():
         bar = tqdm(
             train_loader,
             desc=f"Epoch {epoch:03d}/{EPOCHS}",
-            leave=False
+            leave=False,
         )
 
         for batch in bar:
@@ -175,7 +184,7 @@ def main():
             f"segment_acc={metrics['segment_acc']*100:6.2f}%"
         )
 
-        # Primäres Kriterium: vollständige Ziffer korrekt.
+        # Primary model-selection metric: probabilistically decoded character.
         score = metrics["char_acc"]
 
         if score > best_val:
@@ -188,7 +197,7 @@ def main():
                 "epoch": epoch,
             }, best_path)
 
-            print(f"  -> neues bestes Modell: {best_path}")
+            print(f"  -> new best model: {best_path}")
         else:
             epochs_without_improvement += 1
 
@@ -196,7 +205,7 @@ def main():
             print("Early stopping.")
             break
 
-    print(f"\nBestes Modell: {best_path}")
+    print(f"\nBest model: {best_path}")
 
 
 if __name__ == "__main__":
