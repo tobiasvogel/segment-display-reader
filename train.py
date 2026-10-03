@@ -302,7 +302,7 @@ def main():
             stale = 0
 
             checkpoint = {
-                "architecture": "segment-multitask-v1",
+                "architecture": "segment-multitask-v2",
                 "model_state": model.state_dict(),
                 "model_id": model_id,
                 "created_at": created_at,
@@ -321,7 +321,7 @@ def main():
                 model_id,
                 checkpoint_path,
                 {
-                    "architecture": "segment-multitask-v1",
+                    "architecture": "segment-multitask-v2",
                     "created_at": created_at,
                     "best_epoch": best_epoch,
                     "val_metrics": best_metrics,
