@@ -56,9 +56,11 @@ def main():
     print(f"Evaluating model: {model_id}")
 
     architecture = checkpoint.get("architecture")
-    if architecture not in (None, "segment-multitask-v1"):
+    if architecture != "segment-multitask-v1":
         raise RuntimeError(
-            f"Unsupported checkpoint architecture: {architecture}"
+            "This checkpoint predates the multi-task architecture or uses an "
+            f"unsupported architecture ({architecture!r}). Retrain with the "
+            "current train.py before evaluating it."
         )
 
     model = SegmentCNN().to(device)
