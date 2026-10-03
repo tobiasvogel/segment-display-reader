@@ -8,6 +8,10 @@ class SegmentMultiTaskCNN(nn.Module):
     Shared visual backbone with two heads:
       - display-type classification: 7 / 13 / 14 / 16
       - up to 16 independent segment-state logits
+
+    Spatial information is deliberately retained before the prediction heads.
+    Segment identity depends strongly on position (e.g. B vs F, C vs E), so a
+    global 1x1 average pool is unsuitable here.
     """
 
     def __init__(self):
@@ -32,15 +36,20 @@ class SegmentMultiTaskCNN(nn.Module):
             nn.Conv2d(64, 96, kernel_size=3, padding=1),
             nn.BatchNorm2d(96),
             nn.ReLU(inplace=True),
-            nn.AdaptiveAvgPool2d((1, 1)),
+
+            # Keep a coarse spatial grid instead of collapsing to 1x1.
+            nn.AdaptiveAvgPool2d((6, 4)),
         )
 
         self.shared = nn.Sequential(
             nn.Flatten(),
-            nn.Dropout(0.20),
+            nn.Linear(96 * 6 * 4, 128),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.25),
         )
-        self.type_head = nn.Linear(96, len(SEGMENT_TYPES))
-        self.segment_head = nn.Linear(96, MAX_SEGMENTS)
+
+        self.type_head = nn.Linear(128, len(SEGMENT_TYPES))
+        self.segment_head = nn.Linear(128, MAX_SEGMENTS)
 
     def forward(self, x):
         features = self.shared(self.features(x))
@@ -50,6 +59,4 @@ class SegmentMultiTaskCNN(nn.Module):
         }
 
 
-# Backward-friendly import name for callers; old 7-output checkpoints are not
-# shape-compatible and should be retrained after this architecture change.
 SegmentCNN = SegmentMultiTaskCNN
