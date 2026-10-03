@@ -13,7 +13,7 @@ from .config import (
     DISPLAY_TYPE_BY_ID,
     SEGMENT_TYPES,
 )
-from .labels import TYPE_TO_INDEX, padded_target
+from .labels import TYPE_TO_INDEX, padded_target, validate_label
 
 
 @dataclass(frozen=True)
@@ -26,19 +26,12 @@ class SampleMeta:
 
     @property
     def source_id(self):
-        """Stable ID shared by an original image and all augmentations."""
         return (
             f"s{self.segment_type}:{self.display_id}:"
             f"{self.label}:{self.index}"
         )
 
 
-# Legacy:
-#   d0_4_001.png
-# New explicit segment-type form:
-#   s14_d0_A_001.png
-#
-# Both also accept _augNNN before the extension.
 _FILENAME_RE = re.compile(
     r"^(?:s(?P<segment_type>7|13|14|16)_)?"
     r"d(?P<display>[A-Za-z0-9-]+)_"
@@ -92,8 +85,17 @@ def collect_samples(*directories):
                 continue
 
             meta = parse_filename(path)
-            if meta is not None:
-                samples.append(meta)
+            if meta is None:
+                continue
+
+            # Fail early on unsupported labels instead of silently training a
+            # type-only sample by accident.
+            try:
+                validate_label(meta.segment_type, meta.label)
+            except ValueError as exc:
+                raise ValueError(f"{path.name}: {exc}") from exc
+
+            samples.append(meta)
 
     return samples
 
