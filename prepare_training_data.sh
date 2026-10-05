@@ -3,19 +3,23 @@ set -euo pipefail
 
 TRAINING_REPO="tobiasvogel/segment-display-trainingdata"
 COPIES=20
+PYTHON_OVERRIDE=""
 
 usage() {
     cat <<'EOF'
 Usage:
-  ./prepare_training_data.sh [--copies N]
+  ./prepare_training_data.sh [--copies N] [--python PATH]
 
 Downloads the latest labeled training data from the private training-data
 repository into data/raw/, clears/rebuilds data/augmented/, and leaves the
 project ready for train.py.
 
 Options:
-  --copies N   Number of offline augmentations per original image (default: 20)
-  -h, --help   Show this help
+  --copies N          Number of offline augmentations per original image (default: 20)
+  --python PATH       Python 3 executable to use, e.g. /opt/homebrew/bin/python3
+  --python-executable PATH
+                      Alias for --python
+  -h, --help          Show this help
 EOF
 }
 
@@ -27,6 +31,14 @@ while [[ $# -gt 0 ]]; do
                 exit 2
             fi
             COPIES="$2"
+            shift 2
+            ;;
+        --python|--python-executable)
+            if [[ $# -lt 2 ]]; then
+                echo "Error: $1 requires a path." >&2
+                exit 2
+            fi
+            PYTHON_OVERRIDE="$2"
             shift 2
             ;;
         -h|--help)
@@ -54,7 +66,14 @@ if [[ ! -f "augment_dataset.py" ]] || [[ ! -f "train.py" ]]; then
     exit 1
 fi
 
-if [[ -x ".venv/bin/python" ]]; then
+if [[ -n "$PYTHON_OVERRIDE" ]]; then
+    if [[ ! -x "$PYTHON_OVERRIDE" ]]; then
+        echo "Error: Python executable is not executable or does not exist:" >&2
+        echo "  $PYTHON_OVERRIDE" >&2
+        exit 1
+    fi
+    PYTHON="$PYTHON_OVERRIDE"
+elif [[ -x ".venv/bin/python" ]]; then
     PYTHON=".venv/bin/python"
 elif command -v python3 >/dev/null 2>&1; then
     PYTHON="python3"
@@ -64,6 +83,14 @@ else
     echo "Error: Python was not found." >&2
     exit 1
 fi
+
+if ! "$PYTHON" -c 'import sys; raise SystemExit(0 if sys.version_info.major == 3 else 1)'; then
+    echo "Error: selected Python executable is not Python 3:" >&2
+    echo "  $PYTHON" >&2
+    exit 1
+fi
+
+echo "Using Python: $PYTHON"
 
 TMP_DIR="$(mktemp -d)"
 cleanup() {
