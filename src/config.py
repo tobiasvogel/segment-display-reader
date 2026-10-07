@@ -24,7 +24,7 @@ DISPLAY_TYPE_BY_ID = {}
 #
 # 7-segment includes lowercase "h" for hour indicators.
 CHARACTER_WHITELISTS = {
-    7: tuple("0123456789-h"),
+    7: tuple("0123456789-hH"),
     13: tuple(),
     14: tuple(),
     16: tuple(),

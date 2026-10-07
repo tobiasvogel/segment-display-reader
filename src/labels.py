@@ -31,6 +31,7 @@ CHARSETS = {
         # C + E + F + G.
         # If a particular display uses another glyph, adjust this tuple.
         "h": (0, 0, 1, 0, 1, 1, 1),
+	"H": (0, 1, 1, 0, 1, 1, 1),
     },
 
     # Segment naming/layout conventions differ between vendors for 13/14/16
