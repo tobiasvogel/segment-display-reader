@@ -1,5 +1,5 @@
 {
-  "active": "segment-2026-10-03-r06.pt",
+  "active": "segment-2026-10-07-r01.pt",
   "models": {
     "segment-2026-10-03-r01": {
       "architecture": "segment-multitask-v1",
@@ -78,6 +78,32 @@
         "type_loss": 1.9073384370881647e-07
       },
       "validation_source_images": 15
+    },
+    "segment-2026-10-07-r01": {
+      "architecture": "segment-multitask-v2",
+      "best_epoch": 12,
+      "created_at": "2026-10-07T20:31:08+02:00",
+      "decoder": "probabilistic-v2",
+      "file": "segment-2026-10-07-r01.pt",
+      "supported_segment_types": [
+        7,
+        13,
+        14,
+        16
+      ],
+      "train_source_images": 159,
+      "val_metrics": {
+        "char_acc": 0.9107142857142857,
+        "char_samples": 840,
+        "exact_bits_acc": 0.9047619047619048,
+        "loss": 0.1041492483964784,
+        "oracle_type_char_acc": 0.9107142857142857,
+        "segment_acc": 0.9624149659863945,
+        "segment_loss": 0.10414156049715,
+        "type_acc": 1.0,
+        "type_loss": 1.537748801044054e-05
+      },
+      "validation_source_images": 40
     }
   }
 }
